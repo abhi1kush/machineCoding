@@ -1,4 +1,5 @@
 Features
+
 Order Creation: Create new orders with an initial status of "Pending".
 Order Processing: Orders transition through "Pending" → "Processing" → "Completed" states.
 Low Latency Reads: Order status is cached in Redis for fast retrieval.
@@ -60,14 +61,8 @@ Edit
 3. Get Metrics
 Endpoint: GET /metrics
 Curl Example:
-bash
-Copy
-Edit
 curl http://localhost:8080/metrics
 Response:
-json
-Copy
-Edit
 {
   "total_orders_processed": 10,
   "average_processing_time": 2.1,
@@ -75,6 +70,7 @@ Edit
   "orders_processing": 0,
   "orders_completed": 10
 }
+
 Design Decisions and Trade-offs
 Asynchronous Order Processing:
 Orders are queued and processed by a worker pool asynchronously, which improves responsiveness. However, it introduces eventual consistency, meaning the order status might not update instantly.
@@ -85,15 +81,12 @@ Storing orders and metrics in separate databases reduces contention and allows i
 Redis for Low Latency:
 Order status is cached in Redis to provide quick read access. The cache is updated on order creation and during status transitions. In the event of a cache miss, the system falls back to the orders database.
 
-Rotating Logs:
-Using Lumberjack to rotate log files ensures that log files do not grow indefinitely, which is crucial for long-running applications.
-
 Modular Architecture:
 The system is divided into distinct modules (handlers, services, models, database, queue, cache, logger) to promote maintainability and ease of testing.
 
 Assumptions
 Order Processing Simulation:
-Processing is simulated with a fixed delay (using time.Sleep). In a production environment, processing may involve more complex workflows and error handling.
+Processing is simulated with a fixed delay. In a production environment, processing may involve more complex workflows and error handling.
 
 Use of SQLite:
 SQLite is used for demonstration and testing purposes. A production system would likely use a more robust database like PostgreSQL or MySQL.
@@ -106,10 +99,6 @@ The design focuses on modularity and separation of concerns to allow scaling ind
 
 Running Unit Tests
 Run the test suite with:
-
-bash
-Copy
-Edit
 go test ./tests -v
 The tests cover API endpoints, database operations, and the order processing queue.
 
