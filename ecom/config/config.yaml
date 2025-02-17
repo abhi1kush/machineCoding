@@ -1,0 +1,19 @@
+server:
+  port: "8080"
+
+database:
+  driver: "sqlite3"
+  dsn: "orders.db"
+
+metrics:
+  driver: "sqlite3"
+  dsn: "metrics.db"
+
+queue:
+  workerPool: 10
+  queueCapacity: 1000
+
+redis:
+  addr: "localhost:6379"
+  password: ""
+  db: 0
