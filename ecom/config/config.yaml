@@ -10,7 +10,7 @@ metrics:
   dsn: "metrics.db"
 
 queue:
-  workerPool: 10
+  workerPool: 100
   queueCapacity: 1000
 
 redis:
