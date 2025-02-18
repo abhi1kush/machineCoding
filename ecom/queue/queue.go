@@ -49,22 +49,19 @@ func AddOrderToQueue(orderID string) {
 }
 
 func processOrder(order Order) {
-	_, err := db.DB.Exec("UPDATE orders SET status = ? WHERE order_id = ?", constants.PROCESSING, order.OrderID)
-	if err != nil {
-		log.Println("Error updating order to Processing:", err)
-		return
-	}
 	if err := cache.SetOrderStatus(order.OrderID, string(constants.PROCESSING)); err != nil {
 		log.Println("Error updating cache to Processing:", err)
 	}
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
 
-	_, err = db.DB.Exec("UPDATE orders SET status = ? WHERE order_id = ?", constants.COMPELETED, order.OrderID)
-	if err != nil {
-		log.Printf("Error updating order %v to Completed: err %v", order.OrderID, err)
-	}
 	if err := cache.SetOrderStatus(order.OrderID, string(constants.COMPELETED)); err != nil {
 		log.Printf("Error updating cache ,order %v to Completed: err %v", order.OrderID, err)
 	}
+
+	go func(orderID string) {
+		if _, err := db.DB.Exec("UPDATE orders SET status = ? WHERE order_id = ?", string(constants.COMPELETED), orderID); err != nil {
+			log.Println("Error updating order to Completed in DB:", err)
+		}
+	}(order.OrderID)
 }

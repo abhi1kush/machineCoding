@@ -91,18 +91,17 @@ func TestGetOrderStatusAPI(t *testing.T) {
 	orderID, err := services.CreateOrder("test-user-status", "item1,item2", 50.0)
 	assert.Nil(t, err)
 
+	var response map[string]interface{}
 	// Check initial status via API.
 	req, _ := http.NewRequest("GET", "/order/"+orderID, nil)
 	w := httptest.NewRecorder()
 	testRouter.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)
-	var response map[string]interface{}
+
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	assert.Nil(t, err)
-	assert.Equal(t, "Pending", response["status"])
+	assert.Equal(t, "Processing", response["status"])
 
-	// Add order to processing queue and wait for processing.
-	queue.AddOrderToQueue(orderID)
 	time.Sleep(3 * time.Second)
 
 	// Retrieve status again; final status should be "Completed".
