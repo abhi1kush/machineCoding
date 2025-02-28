@@ -3,8 +3,10 @@ package services
 import (
 	"database/sql"
 	"log"
+	"time"
 
 	"ecom.com/cache"
+	"ecom.com/common"
 	"ecom.com/constants"
 	"ecom.com/db"
 	"ecom.com/logger"
@@ -13,21 +15,20 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	ProcessingTimeMetricKey = "processing_time"
+	CreationTimeMetricKey   = "creation_time"
+)
+
 func CreateOrder(userID string, itemIDs string, totalAmount float64) (string, error) {
 	orderID := uuid.New().String()
 
-	_, err := db.DB.Exec("INSERT INTO orders (order_id, user_id, item_ids, total_amount, status) VALUES (?, ?, ?, ?, ?)",
-		orderID, userID, itemIDs, totalAmount, constants.PENDING)
-	if err != nil {
-		return "", err
-	}
-
-	err = cache.SetOrderStatus(orderID, string(constants.PENDING))
+	err := cache.SetOrderStatus(orderID, string(constants.PENDING))
 	if err != nil {
 		log.Printf("Warning: failed to set order status in Redis for orderID %s: %v", orderID, err)
 	}
 
-	queue.AddOrderToQueue(orderID)
+	queue.OrderCreationQueue.AddOrderToQueue(queue.Item{Id: orderID, Value: &common.OrderRequest{UserID: userID, ItemIDs: itemIDs, TotalAmount: totalAmount}})
 	return orderID, nil
 }
 
@@ -54,4 +55,37 @@ func GetOrderStatus(orderID string) (string, error) {
 	_ = cache.SetOrderStatus(orderID, dbStatus)
 
 	return dbStatus, nil
+}
+
+func ProcessOrder(item queue.Item) {
+	order, ok := item.Value.(*common.OrderItem)
+	if !ok {
+		log.Println("Invalid item in queue:")
+		return
+	}
+	if err := cache.SetOrderStatus(order.OrderID, string(constants.PROCESSING)); err != nil {
+		log.Println("Error updating cache to Processing:", err)
+	}
+
+	time.Sleep(1 * time.Second)
+
+	if err := cache.SetOrderStatus(order.OrderID, string(constants.COMPELETED)); err != nil {
+		log.Printf("Error updating cache ,order %v to Completed: err %v", order.OrderID, err)
+	}
+
+	go func(orderID string) {
+		if _, err := db.DB.Exec("UPDATE orders SET status = ? WHERE order_id = ?", string(constants.COMPELETED), orderID); err != nil {
+			log.Println("Error updating order to Completed in DB:", err)
+		}
+	}(order.OrderID)
+}
+
+func CreateOrderInDB(item queue.Item) {
+	orderReq, _ := item.Value.(*common.OrderRequest)
+	_, err := db.DB.Exec("INSERT INTO orders (order_id, user_id, item_ids, total_amount, status) VALUES (?, ?, ?, ?, ?)",
+		item.Id, orderReq.UserID, orderReq.ItemIDs, orderReq.TotalAmount, constants.PENDING)
+	if err != nil {
+		log.Printf("Failed to create order %v", err)
+	}
+	queue.OrderProcessingQueue.AddOrderToQueue(queue.Item{Id: item.Id, Value: common.OrderItem{OrderID: item.Id}})
 }

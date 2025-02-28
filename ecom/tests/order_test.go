@@ -15,6 +15,7 @@ import (
 	"ecom.com/db"
 	"ecom.com/queue"
 	"ecom.com/routes"
+	"ecom.com/services"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/mattn/go-sqlite3"
@@ -40,7 +41,11 @@ func TestMain(m *testing.M) {
 	db.InitMetricsDB(config.AppConfig.Database.Driver, config.AppConfig.Database.DSN)
 	defer db.CloseDB()
 
-	queue.StartOrderProcessor(config.AppConfig.Queue.WorkerPool, config.AppConfig.Queue.QueueCapacity)
+	queue.OrderCreationQueue = queue.NewQueue(config.AppConfig.Queue.WorkerPool, config.AppConfig.Queue.QueueCapacity, services.CreateOrderInDB, services.CreationTimeMetricKey)
+	queue.OrderCreationQueue.StartOrderProcessor()
+
+	queue.OrderProcessingQueue = queue.NewQueue(config.AppConfig.Queue.WorkerPool, config.AppConfig.Queue.QueueCapacity, services.ProcessOrder, services.ProcessingTimeMetricKey)
+	queue.OrderProcessingQueue.StartOrderProcessor()
 
 	router = gin.Default()
 	routes.SetupRoutes(router)

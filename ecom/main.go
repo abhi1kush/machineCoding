@@ -9,6 +9,7 @@ import (
 	"ecom.com/logger"
 	"ecom.com/queue"
 	"ecom.com/routes"
+	"ecom.com/services"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/mattn/go-sqlite3"
@@ -27,12 +28,14 @@ func main() {
 
 	cache.InitRedis(config.AppConfig.Redis.Addr, config.AppConfig.Redis.Password, config.AppConfig.Redis.DB)
 
-	queue.StartOrderProcessor(config.AppConfig.Queue.WorkerPool, config.AppConfig.Queue.QueueCapacity)
+	queue.OrderCreationQueue = queue.NewQueue(config.AppConfig.Queue.WorkerPool, config.AppConfig.Queue.QueueCapacity, services.CreateOrderInDB, services.CreationTimeMetricKey)
+	queue.OrderCreationQueue.StartOrderProcessor()
+
+	queue.OrderProcessingQueue = queue.NewQueue(config.AppConfig.Queue.WorkerPool, config.AppConfig.Queue.QueueCapacity, services.ProcessOrder, services.ProcessingTimeMetricKey)
+	queue.OrderProcessingQueue.StartOrderProcessor()
 
 	r := gin.Default()
 	routes.SetupRoutes(r)
-
-	queue.StartOrderProcessor(config.AppConfig.Queue.WorkerPool, config.AppConfig.Queue.QueueCapacity)
 
 	log.Println("Server running on port", config.AppConfig.Server.Port)
 	r.Run(":" + config.AppConfig.Server.Port)

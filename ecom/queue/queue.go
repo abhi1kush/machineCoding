@@ -5,63 +5,54 @@ import (
 	"sync"
 	"time"
 
-	"ecom.com/cache"
-	"ecom.com/constants"
 	"ecom.com/db"
 )
 
-type Order struct {
-	OrderID string
+var OrderProcessingQueue *Queue
+var OrderCreationQueue *Queue
+
+type Item struct {
+	Id    string
+	Value any
 }
 
-var (
-	orderQueue chan Order
-	workerPool int
-	wg         sync.WaitGroup
-)
+type Queue struct {
+	orderQueue       chan Item
+	workerPool       int
+	wg               sync.WaitGroup
+	processOrderFunc func(item Item)
+	metricKeyName    string
+}
 
-func StartOrderProcessor(poolSize int, queueCapacity int) {
-	orderQueue = make(chan Order, queueCapacity)
-	workerPool = poolSize
-
-	for i := 0; i < workerPool; i++ {
-		wg.Add(1)
-		go worker()
+func NewQueue(poolSize int, queueCapacity int, processOrderFunc func(item Item), metricKeyName string) *Queue {
+	return &Queue{
+		orderQueue: make(chan Item, queueCapacity),
+		workerPool: poolSize, wg: sync.WaitGroup{},
+		processOrderFunc: processOrderFunc,
+		metricKeyName:    metricKeyName,
 	}
 }
 
-func worker() {
-	defer wg.Done()
-	for order := range orderQueue {
-		start := time.Now()
-		processOrder(order)
-		duration := time.Since(start)
+func (q *Queue) StartOrderProcessor() {
+	for i := 0; i < q.workerPool; i++ {
+		q.wg.Add(1)
+		go q.worker(q.processOrderFunc, q.metricKeyName)
+	}
+}
 
-		_, err := db.MetricsDB.Exec("INSERT INTO metrics (order_id, processing_time) VALUES (?, ?)", order.OrderID, duration.Seconds())
+func (q *Queue) worker(processOrderFunc func(item Item), metricKeyName string) {
+	defer q.wg.Done()
+	for item := range q.orderQueue {
+		start := time.Now()
+		processOrderFunc(item)
+		duration := time.Since(start)
+		_, err := db.MetricsDB.Exec("INSERT INTO metrics (order_id, processing_time) VALUES (?, ?)", item.Id, duration.Seconds())
 		if err != nil {
 			log.Println("Error updating metrics in MetricsDB:", err)
 		}
 	}
 }
 
-func AddOrderToQueue(orderID string) {
-	orderQueue <- Order{OrderID: orderID}
-}
-
-func processOrder(order Order) {
-	if err := cache.SetOrderStatus(order.OrderID, string(constants.PROCESSING)); err != nil {
-		log.Println("Error updating cache to Processing:", err)
-	}
-
-	time.Sleep(1 * time.Second)
-
-	if err := cache.SetOrderStatus(order.OrderID, string(constants.COMPELETED)); err != nil {
-		log.Printf("Error updating cache ,order %v to Completed: err %v", order.OrderID, err)
-	}
-
-	go func(orderID string) {
-		if _, err := db.DB.Exec("UPDATE orders SET status = ? WHERE order_id = ?", string(constants.COMPELETED), orderID); err != nil {
-			log.Println("Error updating order to Completed in DB:", err)
-		}
-	}(order.OrderID)
+func (q *Queue) AddOrderToQueue(item Item) {
+	q.orderQueue <- item
 }

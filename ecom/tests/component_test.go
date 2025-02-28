@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"ecom.com/common"
 	"ecom.com/config"
 	"ecom.com/db"
 	"ecom.com/queue"
@@ -44,8 +45,11 @@ func setup() {
 	db.MetricsDB.Exec("DELETE FROM metrics")
 
 	cache.InitRedis(config.AppConfig.Redis.Addr, config.AppConfig.Redis.Password, config.AppConfig.Redis.DB)
+	queue.OrderCreationQueue = queue.NewQueue(config.AppConfig.Queue.WorkerPool, config.AppConfig.Queue.QueueCapacity, services.CreateOrderInDB, services.CreationTimeMetricKey)
+	queue.OrderCreationQueue.StartOrderProcessor()
 
-	queue.StartOrderProcessor(config.AppConfig.Queue.WorkerPool, config.AppConfig.Queue.QueueCapacity)
+	queue.OrderProcessingQueue = queue.NewQueue(config.AppConfig.Queue.WorkerPool, config.AppConfig.Queue.QueueCapacity, services.ProcessOrder, services.ProcessingTimeMetricKey)
+	queue.OrderProcessingQueue.StartOrderProcessor()
 
 	testRouter = gin.Default()
 	routes.SetupRoutes(testRouter)
@@ -100,7 +104,7 @@ func TestGetOrderStatusAPI(t *testing.T) {
 
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	assert.Nil(t, err)
-	assert.Equal(t, "Processing", response["status"])
+	assert.Equal(t, "Pending", response["status"])
 
 	time.Sleep(3 * time.Second)
 
@@ -122,9 +126,8 @@ func TestMetricsAPI(t *testing.T) {
 	// Create and process a few orders.
 	count := 3
 	for i := 0; i < count; i++ {
-		orderID, err := services.CreateOrder("user"+strconv.Itoa(i), "item1,item2", 100.0)
+		_, err := services.CreateOrder("user"+strconv.Itoa(i), "item1,item2", 100.0)
 		assert.Nil(t, err)
-		queue.AddOrderToQueue(orderID)
 	}
 	// Allow processing to complete.
 	time.Sleep(4 * time.Second)
@@ -141,6 +144,25 @@ func TestMetricsAPI(t *testing.T) {
 	assert.GreaterOrEqual(t, totalOrdersProcessed, count)
 }
 
+func TestDatabaseOperations0(t *testing.T) {
+	setup()
+	defer teardown()
+	orderID := 5
+	userID := "db-test-user"
+	itemIDs := "item1,item2"
+	amount := 75.0
+	var status string
+	_, err := db.DB.Exec("INSERT INTO orders (order_id, user_id, item_ids, total_amount, status) VALUES (?, ?, ?, ?, ?)", orderID, userID, itemIDs, amount, "Pending")
+	assert.Nil(t, err)
+	var orderIDOut, userId string
+	var amountOut float64
+	err = db.DB.QueryRow("SELECT order_id, user_id, total_amount, status  FROM orders WHERE order_id = ?", orderID).Scan(&orderIDOut, &userId, &amountOut, &status)
+	assert.Nil(t, err)
+	assert.Equal(t, "Pending", status)
+	assert.Equal(t, amount, amountOut)
+	assert.Equal(t, "db-test-user", userId)
+}
+
 // TestDatabaseOperations verifies that creating an order inserts the correct record into the orders DB.
 func TestDatabaseOperations(t *testing.T) {
 	setup()
@@ -148,10 +170,14 @@ func TestDatabaseOperations(t *testing.T) {
 
 	orderID, err := services.CreateOrder("db-test-user", "item1,item2", 75.0)
 	assert.Nil(t, err)
-
+	time.Sleep(1 * time.Second)
 	var status string
-	err = db.DB.QueryRow("SELECT status FROM orders WHERE order_id = ?", orderID).Scan(&status)
+	var orderIDOut, userId string
+	var amount float64
+	err = db.DB.QueryRow("SELECT order_id, user_id, total_amount, status  FROM orders WHERE order_id = ?", orderID).Scan(&orderIDOut, &userId, &amount, &status)
 	assert.Nil(t, err)
+	assert.Equal(t, 75.0, amount)
+	assert.Equal(t, "db-test-user", userId)
 	assert.Equal(t, "Pending", status)
 }
 
@@ -163,7 +189,7 @@ func TestQueueProcessing(t *testing.T) {
 
 	orderID, err := services.CreateOrder("queue-test-user", "item1,item2", 200.0)
 	assert.Nil(t, err)
-	queue.AddOrderToQueue(orderID)
+	queue.OrderProcessingQueue.AddOrderToQueue(queue.Item{Id: orderID, Value: common.OrderItem{OrderID: orderID}})
 	time.Sleep(4 * time.Second)
 
 	// Verify orders DB status.
@@ -194,7 +220,7 @@ func TestConcurrentQueueProcessing(t *testing.T) {
 				t.Errorf("Error creating order: %v", err)
 				return
 			}
-			queue.AddOrderToQueue(orderID)
+			queue.OrderProcessingQueue.AddOrderToQueue(queue.Item{Id: orderID, Value: common.OrderItem{OrderID: orderID}})
 		}(i)
 	}
 	wg.Wait()

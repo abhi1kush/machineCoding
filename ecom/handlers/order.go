@@ -3,14 +3,14 @@ package handlers
 import (
 	"net/http"
 
-	"ecom.com/models"
+	"ecom.com/common"
 	"ecom.com/services"
 
 	"github.com/gin-gonic/gin"
 )
 
 func CreateOrderHandler(c *gin.Context) {
-	req := models.OrderRequest{}
+	req := common.OrderRequest{}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -22,7 +22,7 @@ func CreateOrderHandler(c *gin.Context) {
 		return
 	}
 
-	resp := models.OrderResponse{Message: "Order created", OrderId: orderID}
+	resp := common.OrderResponse{Message: "Order created", OrderId: orderID}
 	c.JSON(http.StatusOK, resp)
 }
 
@@ -39,6 +39,6 @@ func GetOrderStatusHandler(c *gin.Context) {
 		return
 	}
 
-	resp := models.OrderStatusResponse{OrderId: orderID, Status: status}
+	resp := common.OrderStatusResponse{OrderId: orderID, Status: status}
 	c.JSON(http.StatusOK, resp)
 }
