@@ -7,6 +7,7 @@ import (
 
 	"ecom.com/cache"
 	"ecom.com/common"
+	"ecom.com/config"
 	"ecom.com/constants"
 	"ecom.com/logger"
 	"ecom.com/models"
@@ -17,17 +18,20 @@ import (
 )
 
 type Order struct {
-	repo            repository.OrderRepositoryI
-	creationQueue   *queue.Queue
-	processingQueue *queue.Queue
-	cache           cache.CacheI
+	repo                 repository.OrderRepositoryI
+	orderCreationQueue   *queue.Queue
+	orderProcessingQueue *queue.Queue
+	cache                cache.CacheI
 }
 
-func NewOrderService(repo repository.OrderRepositoryI, cache cache.CacheI) *Order {
-	return &Order{
-		repo:  repo,
+func NewOrderService(appConfig config.Config, orderRepo repository.OrderRepositoryI, metricRepo repository.MetricRepositoryI, cache cache.CacheI) *Order {
+	orderService := &Order{
+		repo:  orderRepo,
 		cache: cache,
 	}
+	orderService.orderCreationQueue = queue.NewQueue(appConfig.Queue.WorkerPool, appConfig.Queue.QueueCapacity, orderService.CreateOrderInDB, metricRepo, orderRepo, cache)
+	orderService.orderProcessingQueue = queue.NewQueue(appConfig.Queue.WorkerPool, appConfig.Queue.QueueCapacity, orderService.ProcessOrder, metricRepo, orderRepo, cache)
+	return orderService
 }
 
 const (
@@ -43,7 +47,7 @@ func (o *Order) CreateOrder(userID string, itemIDs string, totalAmount float64) 
 		log.Printf("Warning: failed to set order status in Redis for orderID %s: %v", orderID, err)
 	}
 
-	o.creationQueue.AddOrderToQueue(queue.Item{Id: orderID, Value: &common.OrderRequest{UserID: userID, ItemIDs: itemIDs, TotalAmount: totalAmount}})
+	o.orderCreationQueue.AddOrderToQueue(queue.Item{Id: orderID, Value: &common.OrderRequest{UserID: userID, ItemIDs: itemIDs, TotalAmount: totalAmount}})
 	return orderID, nil
 }
 
@@ -91,7 +95,7 @@ func (o *Order) GetOrderStatus(orderID string) (string, error) {
 func (o *Order) ProcessOrder(item queue.Item) {
 	order, ok := item.Value.(*common.OrderItem)
 	if !ok {
-		log.Println("Invalid item in queue:")
+		log.Printf("Invalid item in queue: %v ", item)
 		return
 	}
 	if err := o.cache.SetOrderStatus(order.OrderID, string(constants.PROCESSING)); err != nil {
@@ -123,5 +127,13 @@ func (o *Order) CreateOrderInDB(item queue.Item) {
 	if err != nil {
 		log.Printf("Failed to create order %v", err)
 	}
-	o.processingQueue.AddOrderToQueue(queue.Item{Id: item.Id, Value: common.OrderItem{OrderID: item.Id}})
+	o.orderProcessingQueue.AddOrderToQueue(queue.Item{Id: item.Id, Value: common.OrderItem{OrderID: item.Id}})
+}
+
+func (o *Order) GetOrderProcessQueue() *queue.Queue {
+	return o.orderProcessingQueue
+}
+
+func (o *Order) GetOrderCreationQueue() *queue.Queue {
+	return o.orderCreationQueue
 }

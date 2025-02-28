@@ -24,7 +24,7 @@ func (m *Metric) GetMetrics() (*common.Metrics, error) {
 	if err != nil {
 		log.Printf("failed to get data from repository %v", err)
 	}
-	averageProcessingTime, err := m.Repo.GetAverageProcessingTime()
+	averageProcessingTime, err := m.Repo.GetAverageTime(string(constants.PROCESSING_TIME))
 	if err != nil {
 		log.Printf("failed to get data from repository %v", err)
 	}

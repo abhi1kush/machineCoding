@@ -30,22 +30,14 @@ func RegisterOrderRoutes(router *gin.RouterGroup, orderHandler *handlers.OrderHa
 	}
 }
 
-func RegisterMetricRoutes(router *gin.RouterGroup, metricsHandler *handlers.MetricHandler) {
-	metricRoutes := router.Group("/metrics")
-	{
-		metricRoutes.POST("", middleware.LoggerMiddleware(), metricsHandler.CreateMetricsHandler)
-		metricRoutes.GET("/:id", metricsHandler.GetMetricsHandler)
-	}
-}
-
 // RegisterRoutes initializes all API routes with middleware and versioning
 func RegisterRoutes(router *gin.Engine, cfg *RouterConfig) {
 	router.Use(middleware.LoggerMiddleware()) // Apply logging middleware globally
-
+	router.GET("health", handlers.HealthChecksHandler)
 	apiV1 := router.Group("/api/v1") // Version 1 API group
 	{
 		RegisterUserRoutes(apiV1, cfg.UserHandler)
 		RegisterOrderRoutes(apiV1, cfg.OrderHandler)
-		RegisterMetricRoutes(apiV1, cfg.MetricHandler)
+		router.GET("metrics/:id", cfg.MetricHandler.GetMetricsHandler)
 	}
 }

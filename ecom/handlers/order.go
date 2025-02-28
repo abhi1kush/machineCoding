@@ -35,7 +35,7 @@ func (h *OrderHandler) CreateOrderHandler(c *gin.Context) {
 }
 
 func (h *OrderHandler) GetOrderHandler(c *gin.Context) {
-	orderID := c.Param("order_id")
+	orderID := c.Param("id")
 	order, err := h.Service.GetOrder(orderID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch order status"})
@@ -46,7 +46,7 @@ func (h *OrderHandler) GetOrderHandler(c *gin.Context) {
 }
 
 func (h *OrderHandler) GetOrderStatusHandler(c *gin.Context) {
-	orderID := c.Param("order_id")
+	orderID := c.Param("id")
 	status, err := h.Service.GetOrderStatus(orderID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch order status"})

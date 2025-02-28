@@ -31,8 +31,8 @@ func main() {
 	defer database.CloseDB(container.DB)
 	defer database.CloseDB(container.MetricDB)
 
-	container.OrderCreationQueue.StartOrderProcessor()
-	container.OrderProcessQueue.StartOrderProcessor()
+	container.OrderService.GetOrderCreationQueue().StartOrderProcessor()
+	container.OrderService.GetOrderProcessQueue().StartOrderProcessor()
 
 	r := gin.Default()
 	routes.RegisterRoutes(r, container.RoutesCfg)

@@ -27,11 +27,11 @@ func (r *SQLiteUserRepository) UpdateOrderStatus(orderId string, status string) 
 }
 
 func (r *SQLiteUserRepository) GetOrderByID(id string) (*models.Order, error) {
-	query := `SELECT order_id, user_id, item_ids, total_amount, status FROM users WHERE order_id = ?`
+	query := `SELECT order_id, user_id, total_amount, status FROM orders WHERE order_id = ?`
 	row := r.DB.QueryRow(query, id)
 
 	var order models.Order
-	err := row.Scan(&order.OrderID, &order.UserID, &order.ItemIDs, order.TotalAmount, order.Status)
+	err := row.Scan(&order.OrderID, &order.UserID, &order.TotalAmount, &order.Status)
 	if err != nil {
 		return nil, err
 	}

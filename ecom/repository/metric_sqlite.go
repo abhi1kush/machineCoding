@@ -15,17 +15,17 @@ func NewSQLiteMetricRepository(db *sql.DB) *SQLiteMetricRepository {
 }
 
 func (r *SQLiteMetricRepository) CreateMetric(m *models.Metric) error {
-	query := `INSERT INTO metrics (order_id, processing_time) VALUES (?, ?)`
-	_, err := r.DB.Exec(query, m.OrderId, m.ProcessingTime)
+	query := `INSERT INTO metrics (order_id, duration, metric_name) VALUES (?, ?, ?)`
+	_, err := r.DB.Exec(query, m.OrderId, m.Duration, m.MetricName)
 	return err
 }
 
-func (r *SQLiteMetricRepository) GetMetricByID(id int) (*models.Metric, error) {
-	query := `SELECT order_id, processing_time FROM metrics WHERE order_id = ?`
-	row := r.DB.QueryRow(query, id)
+func (r *SQLiteMetricRepository) GetMetricByID(id int, name string) (*models.Metric, error) {
+	query := `SELECT order_id, duration FROM metrics WHERE order_id = ? AND metric_name = ?`
+	row := r.DB.QueryRow(query, id, name)
 
 	var metric models.Metric
-	err := row.Scan(&metric.OrderId, &metric.ProcessingTime)
+	err := row.Scan(&metric.OrderId, &metric.Duration)
 	if err != nil {
 		return nil, err
 	}
@@ -41,13 +41,13 @@ func (r *SQLiteMetricRepository) GetMetricCount() (*int, error) {
 	return &TotalOrdersReceived, nil
 }
 
-func (r *SQLiteMetricRepository) GetAverageProcessingTime() (*float64, error) {
-	var AverageProcessingTime float64
-	err := r.DB.QueryRow("SELECT COALESCE(AVG(processing_time), 0) FROM metrics").Scan(&AverageProcessingTime)
+func (r *SQLiteMetricRepository) GetAverageTime(metricName string) (*float64, error) {
+	var AverageDuration float64
+	err := r.DB.QueryRow("SELECT COALESCE(AVG(duration), 0) FROM metrics WHERE metric_name = ?", metricName).Scan(&AverageDuration)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
 	}
-	return &AverageProcessingTime, nil
+	return &AverageDuration, nil
 }
 
 func (r *SQLiteMetricRepository) GetCountByStatus(status string) (*int, error) {

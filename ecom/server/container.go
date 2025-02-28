@@ -7,7 +7,6 @@ import (
 	"ecom.com/config"
 	"ecom.com/database"
 	"ecom.com/handlers"
-	"ecom.com/queue"
 	"ecom.com/repository"
 	"ecom.com/routes"
 	"ecom.com/services"
@@ -18,9 +17,6 @@ type Container struct {
 	Cache    cache.CacheI
 	DB       *sql.DB
 	MetricDB *sql.DB
-
-	OrderProcessQueue  *queue.Queue
-	OrderCreationQueue *queue.Queue
 
 	UserRepo   repository.UserRepository
 	OrderRepo  repository.OrderRepositoryI
@@ -53,12 +49,8 @@ func NewContainer(appConfig config.Config) *Container {
 
 	// Initialize service
 	userService := services.NewUserService(userRepo)
-	orderService := services.NewOrderService(orderRepo, cache)
+	orderService := services.NewOrderService(appConfig, orderRepo, metricRepo, cache)
 	metricService := services.NewMetricService(metricRepo)
-
-	//queues
-	orderCreationQueue := queue.NewQueue(appConfig.Queue.WorkerPool, appConfig.Queue.QueueCapacity, orderService.CreateOrderInDB, metricRepo, orderRepo, cache)
-	orderProcessingQueue := queue.NewQueue(appConfig.Queue.WorkerPool, appConfig.Queue.QueueCapacity, orderService.ProcessOrder, metricRepo, orderRepo, cache)
 
 	// Initialize handlers
 	userHandler := handlers.NewUserHandler(userService)
@@ -70,9 +62,6 @@ func NewContainer(appConfig config.Config) *Container {
 
 		DB:       db,
 		MetricDB: metricDb,
-
-		OrderProcessQueue:  orderProcessingQueue,
-		OrderCreationQueue: orderCreationQueue,
 
 		UserRepo:   userRepo,
 		OrderRepo:  orderRepo,

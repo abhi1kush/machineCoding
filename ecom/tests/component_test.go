@@ -41,8 +41,8 @@ func setup() {
 
 	testContainer = server.NewContainer(testConfig)
 
-	testContainer.OrderCreationQueue.StartOrderProcessor()
-	testContainer.OrderProcessQueue.StartOrderProcessor()
+	testContainer.OrderService.GetOrderCreationQueue().StartOrderProcessor()
+	testContainer.OrderService.GetOrderProcessQueue().StartOrderProcessor()
 
 	r := gin.Default()
 	routes.RegisterRoutes(r, testContainer.RoutesCfg)
@@ -212,7 +212,7 @@ func TestConcurrentQueueProcessing(t *testing.T) {
 				t.Errorf("Error creating order: %v", err)
 				return
 			}
-			testContainer.OrderProcessQueue.AddOrderToQueue(queue.Item{Id: orderID, Value: common.OrderItem{OrderID: orderID}})
+			testContainer.OrderService.GetOrderProcessQueue().AddOrderToQueue(queue.Item{Id: orderID, Value: common.OrderItem{OrderID: orderID}})
 		}(i)
 	}
 	wg.Wait()

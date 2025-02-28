@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"ecom.com/cache"
+	"ecom.com/constants"
 	"ecom.com/models"
 	"ecom.com/repository"
 )
@@ -50,7 +51,12 @@ func (q *Queue) worker(processOrderFunc func(item Item)) {
 		start := time.Now()
 		processOrderFunc(item)
 		duration := time.Since(start)
-		err := q.metricRepo.CreateMetric(&models.Metric{OrderId: item.Id, ProcessingTime: duration.Seconds()})
+		err := q.metricRepo.CreateMetric(
+			&models.Metric{
+				OrderId:    item.Id,
+				Duration:   duration.Seconds(),
+				MetricName: string(constants.PROCESSING_TIME),
+			})
 		if err != nil {
 			log.Println("Error updating metrics in MetricsDB:", err)
 		}

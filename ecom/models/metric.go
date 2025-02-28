@@ -1,6 +1,7 @@
 package models
 
 type Metric struct {
-	OrderId        string
-	ProcessingTime float64
+	OrderId    string
+	Duration   float64
+	MetricName string
 }

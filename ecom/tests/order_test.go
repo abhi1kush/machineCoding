@@ -38,8 +38,8 @@ func TestMain(m *testing.M) {
 	defer database.CloseDB(testContainer.DB)
 	defer database.CloseDB(testContainer.MetricDB)
 
-	testContainer.OrderCreationQueue.StartOrderProcessor()
-	testContainer.OrderProcessQueue.StartOrderProcessor()
+	testContainer.OrderService.GetOrderProcessQueue().StartOrderProcessor()
+	testContainer.OrderService.GetOrderCreationQueue().StartOrderProcessor()
 
 	r := gin.Default()
 	routes.RegisterRoutes(r, testContainer.RoutesCfg)
