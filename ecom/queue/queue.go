@@ -5,11 +5,10 @@ import (
 	"sync"
 	"time"
 
-	"ecom.com/db"
+	"ecom.com/cache"
+	"ecom.com/models"
+	"ecom.com/repository"
 )
-
-var OrderProcessingQueue *Queue
-var OrderCreationQueue *Queue
 
 type Item struct {
 	Id    string
@@ -20,33 +19,38 @@ type Queue struct {
 	orderQueue       chan Item
 	workerPool       int
 	wg               sync.WaitGroup
+	orderRepo        repository.OrderRepositoryI
+	metricRepo       repository.MetricRepositoryI
 	processOrderFunc func(item Item)
-	metricKeyName    string
+	cache            cache.CacheI
 }
 
-func NewQueue(poolSize int, queueCapacity int, processOrderFunc func(item Item), metricKeyName string) *Queue {
+func NewQueue(poolSize int, queueCapacity int, processOrderFunc func(item Item), metricRepo repository.MetricRepositoryI, orderRepo repository.OrderRepositoryI, cache cache.CacheI) *Queue {
 	return &Queue{
-		orderQueue: make(chan Item, queueCapacity),
-		workerPool: poolSize, wg: sync.WaitGroup{},
+		orderQueue:       make(chan Item, queueCapacity),
+		workerPool:       poolSize,
+		wg:               sync.WaitGroup{},
+		orderRepo:        orderRepo,
+		metricRepo:       metricRepo,
 		processOrderFunc: processOrderFunc,
-		metricKeyName:    metricKeyName,
+		cache:            cache,
 	}
 }
 
 func (q *Queue) StartOrderProcessor() {
 	for i := 0; i < q.workerPool; i++ {
 		q.wg.Add(1)
-		go q.worker(q.processOrderFunc, q.metricKeyName)
+		go q.worker(q.processOrderFunc)
 	}
 }
 
-func (q *Queue) worker(processOrderFunc func(item Item), metricKeyName string) {
+func (q *Queue) worker(processOrderFunc func(item Item)) {
 	defer q.wg.Done()
 	for item := range q.orderQueue {
 		start := time.Now()
 		processOrderFunc(item)
 		duration := time.Since(start)
-		_, err := db.MetricsDB.Exec("INSERT INTO metrics (order_id, processing_time) VALUES (?, ?)", item.Id, duration.Seconds())
+		err := q.metricRepo.CreateMetric(&models.Metric{OrderId: item.Id, ProcessingTime: duration.Seconds()})
 		if err != nil {
 			log.Println("Error updating metrics in MetricsDB:", err)
 		}

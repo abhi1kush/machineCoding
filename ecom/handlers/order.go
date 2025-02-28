@@ -9,26 +9,45 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func CreateOrderHandler(c *gin.Context) {
+type OrderHandler struct {
+	Service *services.Order
+}
+
+func NewOrderHandler(service *services.Order) *OrderHandler {
+	return &OrderHandler{Service: service}
+}
+
+func (h *OrderHandler) CreateOrderHandler(c *gin.Context) {
 	req := common.OrderRequest{}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	orderID, err := services.CreateOrder(req.UserID, req.ItemIDs, req.TotalAmount)
+	orderID, err := h.Service.CreateOrder(req.UserID, req.ItemIDs, req.TotalAmount)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create order"})
 		return
 	}
 
-	resp := common.OrderResponse{Message: "Order created", OrderId: orderID}
+	resp := &common.OrderAckResponse{Message: "Order created", OrderID: orderID}
 	c.JSON(http.StatusOK, resp)
 }
 
-func GetOrderStatusHandler(c *gin.Context) {
+func (h *OrderHandler) GetOrderHandler(c *gin.Context) {
 	orderID := c.Param("order_id")
-	status, err := services.GetOrderStatus(orderID)
+	order, err := h.Service.GetOrder(orderID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch order status"})
+		return
+	}
+
+	c.JSON(http.StatusOK, order)
+}
+
+func (h *OrderHandler) GetOrderStatusHandler(c *gin.Context) {
+	orderID := c.Param("order_id")
+	status, err := h.Service.GetOrderStatus(orderID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch order status"})
 		return

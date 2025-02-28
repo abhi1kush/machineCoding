@@ -8,32 +8,65 @@ import (
 	"ecom.com/cache"
 	"ecom.com/common"
 	"ecom.com/constants"
-	"ecom.com/db"
 	"ecom.com/logger"
+	"ecom.com/models"
 	"ecom.com/queue"
+	"ecom.com/repository"
 	"github.com/go-redis/redis"
 	"github.com/google/uuid"
 )
+
+type Order struct {
+	repo            repository.OrderRepositoryI
+	creationQueue   *queue.Queue
+	processingQueue *queue.Queue
+	cache           cache.CacheI
+}
+
+func NewOrderService(repo repository.OrderRepositoryI, cache cache.CacheI) *Order {
+	return &Order{
+		repo:  repo,
+		cache: cache,
+	}
+}
 
 const (
 	ProcessingTimeMetricKey = "processing_time"
 	CreationTimeMetricKey   = "creation_time"
 )
 
-func CreateOrder(userID string, itemIDs string, totalAmount float64) (string, error) {
+func (o *Order) CreateOrder(userID string, itemIDs string, totalAmount float64) (string, error) {
 	orderID := uuid.New().String()
 
-	err := cache.SetOrderStatus(orderID, string(constants.PENDING))
+	err := o.cache.SetOrderStatus(orderID, string(constants.PENDING))
 	if err != nil {
 		log.Printf("Warning: failed to set order status in Redis for orderID %s: %v", orderID, err)
 	}
 
-	queue.OrderCreationQueue.AddOrderToQueue(queue.Item{Id: orderID, Value: &common.OrderRequest{UserID: userID, ItemIDs: itemIDs, TotalAmount: totalAmount}})
+	o.creationQueue.AddOrderToQueue(queue.Item{Id: orderID, Value: &common.OrderRequest{UserID: userID, ItemIDs: itemIDs, TotalAmount: totalAmount}})
 	return orderID, nil
 }
 
-func GetOrderStatus(orderID string) (string, error) {
-	status, err := cache.GetOrderStatus(orderID)
+func (o *Order) GetOrder(orderID string) (*common.OrderResponse, error) {
+	order, err := o.repo.GetOrderByID(orderID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, sql.ErrNoRows
+		}
+		return nil, err
+	}
+	orderResp := &common.OrderResponse{
+		OrderID:     order.OrderID,
+		UserID:      order.UserID,
+		ItemIDs:     order.ItemIDs,
+		TotalAmount: order.TotalAmount,
+		Status:      order.Status,
+	}
+	return orderResp, nil
+}
+
+func (o *Order) GetOrderStatus(orderID string) (string, error) {
+	status, err := o.cache.GetOrderStatus(orderID)
 	if err == nil {
 		return status, nil
 	}
@@ -43,8 +76,7 @@ func GetOrderStatus(orderID string) (string, error) {
 	}
 
 	// Fallback to DB.
-	var dbStatus string
-	err = db.DB.QueryRow("SELECT status FROM orders WHERE order_id = ?", orderID).Scan(&dbStatus)
+	order, err := o.repo.GetOrderByID(orderID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return "", sql.ErrNoRows
@@ -52,40 +84,44 @@ func GetOrderStatus(orderID string) (string, error) {
 		return "", err
 	}
 
-	_ = cache.SetOrderStatus(orderID, dbStatus)
-
-	return dbStatus, nil
+	_ = o.cache.SetOrderStatus(order.OrderID, order.Status)
+	return order.Status, nil
 }
 
-func ProcessOrder(item queue.Item) {
+func (o *Order) ProcessOrder(item queue.Item) {
 	order, ok := item.Value.(*common.OrderItem)
 	if !ok {
 		log.Println("Invalid item in queue:")
 		return
 	}
-	if err := cache.SetOrderStatus(order.OrderID, string(constants.PROCESSING)); err != nil {
+	if err := o.cache.SetOrderStatus(order.OrderID, string(constants.PROCESSING)); err != nil {
 		log.Println("Error updating cache to Processing:", err)
 	}
 
 	time.Sleep(1 * time.Second)
 
-	if err := cache.SetOrderStatus(order.OrderID, string(constants.COMPELETED)); err != nil {
+	if err := o.cache.SetOrderStatus(order.OrderID, string(constants.COMPELETED)); err != nil {
 		log.Printf("Error updating cache ,order %v to Completed: err %v", order.OrderID, err)
 	}
 
 	go func(orderID string) {
-		if _, err := db.DB.Exec("UPDATE orders SET status = ? WHERE order_id = ?", string(constants.COMPELETED), orderID); err != nil {
+		if err := o.repo.UpdateOrderStatus(orderID, string(constants.COMPELETED)); err != nil {
 			log.Println("Error updating order to Completed in DB:", err)
 		}
 	}(order.OrderID)
 }
 
-func CreateOrderInDB(item queue.Item) {
+func (o *Order) CreateOrderInDB(item queue.Item) {
 	orderReq, _ := item.Value.(*common.OrderRequest)
-	_, err := db.DB.Exec("INSERT INTO orders (order_id, user_id, item_ids, total_amount, status) VALUES (?, ?, ?, ?, ?)",
-		item.Id, orderReq.UserID, orderReq.ItemIDs, orderReq.TotalAmount, constants.PENDING)
+	err := o.repo.CreateOrder(&models.Order{
+		OrderID:     item.Id,
+		UserID:      orderReq.UserID,
+		ItemIDs:     orderReq.ItemIDs,
+		TotalAmount: orderReq.TotalAmount,
+		Status:      string(constants.PENDING),
+	})
 	if err != nil {
 		log.Printf("Failed to create order %v", err)
 	}
-	queue.OrderProcessingQueue.AddOrderToQueue(queue.Item{Id: item.Id, Value: common.OrderItem{OrderID: item.Id}})
+	o.processingQueue.AddOrderToQueue(queue.Item{Id: item.Id, Value: common.OrderItem{OrderID: item.Id}})
 }

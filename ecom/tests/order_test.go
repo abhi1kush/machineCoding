@@ -10,12 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"ecom.com/cache"
 	"ecom.com/config"
-	"ecom.com/db"
-	"ecom.com/queue"
+	"ecom.com/database"
 	"ecom.com/routes"
-	"ecom.com/services"
+	"ecom.com/server"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/mattn/go-sqlite3"
@@ -27,30 +25,25 @@ var router *gin.Engine
 func TestMain(m *testing.M) {
 	gin.SetMode(gin.TestMode)
 
-	config.AppConfig.Server.Port = "8081"
-	config.AppConfig.Database.Driver = "sqlite3"
-	config.AppConfig.Database.DSN = "orders_test.db"
-	config.AppConfig.Queue.WorkerPool = 5
-	config.AppConfig.Queue.QueueCapacity = 500
+	testConfig := config.Config{}
+	testConfig.Server.Port = "8081"
+	testConfig.Database.Driver = "sqlite3"
+	testConfig.Metrics.Driver = "sqlite3"
+	testConfig.Database.DSN = "orders_test.db"
+	testConfig.Metrics.DSN = "metrics_test.db"
+	testConfig.Queue.WorkerPool = 5
+	testConfig.Queue.QueueCapacity = 500
 
-	cache.InitRedis("127.0.0.1", "pass", 1)
+	testContainer := server.NewContainer(testConfig)
+	defer database.CloseDB(testContainer.DB)
+	defer database.CloseDB(testContainer.MetricDB)
 
-	db.InitDB(config.AppConfig.Database.Driver, config.AppConfig.Database.DSN)
-	defer db.CloseDB()
+	testContainer.OrderCreationQueue.StartOrderProcessor()
+	testContainer.OrderProcessQueue.StartOrderProcessor()
 
-	db.InitMetricsDB(config.AppConfig.Database.Driver, config.AppConfig.Database.DSN)
-	defer db.CloseDB()
-
-	queue.OrderCreationQueue = queue.NewQueue(config.AppConfig.Queue.WorkerPool, config.AppConfig.Queue.QueueCapacity, services.CreateOrderInDB, services.CreationTimeMetricKey)
-	queue.OrderCreationQueue.StartOrderProcessor()
-
-	queue.OrderProcessingQueue = queue.NewQueue(config.AppConfig.Queue.WorkerPool, config.AppConfig.Queue.QueueCapacity, services.ProcessOrder, services.ProcessingTimeMetricKey)
-	queue.OrderProcessingQueue.StartOrderProcessor()
-
-	router = gin.Default()
-	routes.SetupRoutes(router)
-
-	m.Run()
+	r := gin.Default()
+	routes.RegisterRoutes(r, testContainer.RoutesCfg)
+	r.Run()
 }
 
 func TestCreateOrder(t *testing.T) {
