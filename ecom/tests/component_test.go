@@ -86,7 +86,7 @@ func TestGetOrderStatusAPI(t *testing.T) {
 	defer teardown()
 
 	// Create order using the service, which also sets Redis.
-	orderID, err := testContainer.OrderService.CreateOrder("test-user-status", "item1,item2", 50.0)
+	orderID, err := testContainer.OrderService.CreateOrder("test-user-status", []string{"item1", "item2"}, 50.0)
 	assert.Nil(t, err)
 
 	var response map[string]interface{}
@@ -119,7 +119,7 @@ func TestMetricsAPI(t *testing.T) {
 	// Create and process a few orders.
 	count := 3
 	for i := 0; i < count; i++ {
-		_, err := testContainer.OrderService.CreateOrder("user"+strconv.Itoa(i), "item1,item2", 100.0)
+		_, err := testContainer.OrderService.CreateOrder("user"+strconv.Itoa(i), []string{"item1", "item2"}, 100.0)
 		assert.Nil(t, err)
 	}
 	// Allow processing to complete.
@@ -161,7 +161,7 @@ func TestDatabaseOperations(t *testing.T) {
 	setup()
 	defer teardown()
 
-	orderID, err := testContainer.OrderService.CreateOrder("db-test-user", "item1,item2", 75.0)
+	orderID, err := testContainer.OrderService.CreateOrder("db-test-user", []string{"item1", "item2"}, 75.0)
 	assert.Nil(t, err)
 	time.Sleep(1 * time.Second)
 	var status string
@@ -180,7 +180,7 @@ func TestQueueProcessing(t *testing.T) {
 	setup()
 	defer teardown()
 
-	orderID, err := testContainer.OrderService.CreateOrder("queue-test-user", "item1,item2", 200.0)
+	orderID, err := testContainer.OrderService.CreateOrder("queue-test-user", []string{"item1", "item2"}, 200.0)
 	assert.Nil(t, err)
 	time.Sleep(4 * time.Second)
 
@@ -207,7 +207,7 @@ func TestConcurrentQueueProcessing(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			orderID, err := testContainer.OrderService.CreateOrder("concurrent-user"+strconv.Itoa(i), "item1,item2", 150.0)
+			orderID, err := testContainer.OrderService.CreateOrder("concurrent-user"+strconv.Itoa(i), []string{"item1", "item2"}, 150.0)
 			if err != nil {
 				t.Errorf("Error creating order: %v", err)
 				return

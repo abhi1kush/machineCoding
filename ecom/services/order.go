@@ -3,6 +3,7 @@ package services
 import (
 	"database/sql"
 	"log"
+	"sync"
 	"time"
 
 	"ecom.com/cache"
@@ -19,15 +20,17 @@ import (
 
 type Order struct {
 	repo                 repository.OrderRepositoryI
+	itemRepo             repository.ItemRepositoryI
 	orderCreationQueue   *queue.Queue
 	orderProcessingQueue *queue.Queue
 	cache                cache.CacheI
 }
 
-func NewOrderService(appConfig config.Config, orderRepo repository.OrderRepositoryI, metricRepo repository.MetricRepositoryI, cache cache.CacheI) *Order {
+func NewOrderService(appConfig config.Config, orderRepo repository.OrderRepositoryI, itemRepo repository.ItemRepositoryI, metricRepo repository.MetricRepositoryI, cache cache.CacheI) *Order {
 	orderService := &Order{
-		repo:  orderRepo,
-		cache: cache,
+		repo:     orderRepo,
+		itemRepo: itemRepo,
+		cache:    cache,
 	}
 	orderService.orderCreationQueue = queue.NewQueue(appConfig.Queue.WorkerPool, appConfig.Queue.QueueCapacity, orderService.CreateOrderInDB, metricRepo, orderRepo, cache)
 	orderService.orderProcessingQueue = queue.NewQueue(appConfig.Queue.WorkerPool, appConfig.Queue.QueueCapacity, orderService.ProcessOrder, metricRepo, orderRepo, cache)
@@ -39,7 +42,7 @@ const (
 	CreationTimeMetricKey   = "creation_time"
 )
 
-func (o *Order) CreateOrder(userID string, itemIDs string, totalAmount float64) (string, error) {
+func (o *Order) CreateOrder(userID string, itemIDs []string, totalAmount float64) (string, error) {
 	orderID := uuid.New().String()
 
 	err := o.cache.SetOrderStatus(orderID, string(constants.PENDING))
@@ -52,21 +55,7 @@ func (o *Order) CreateOrder(userID string, itemIDs string, totalAmount float64) 
 }
 
 func (o *Order) GetOrder(orderID string) (*common.OrderResponse, error) {
-	order, err := o.repo.GetOrderByID(orderID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, sql.ErrNoRows
-		}
-		return nil, err
-	}
-	orderResp := &common.OrderResponse{
-		OrderID:     order.OrderID,
-		UserID:      order.UserID,
-		ItemIDs:     order.ItemIDs,
-		TotalAmount: order.TotalAmount,
-		Status:      order.Status,
-	}
-	return orderResp, nil
+	return o.getOrder(orderID)
 }
 
 func (o *Order) GetOrderStatus(orderID string) (string, error) {
@@ -101,33 +90,31 @@ func (o *Order) ProcessOrder(item queue.Item) {
 	if err := o.cache.SetOrderStatus(order.OrderID, string(constants.PROCESSING)); err != nil {
 		log.Println("Error updating cache to Processing:", err)
 	}
-
+	// Simulating Order Process Delay.
 	time.Sleep(1 * time.Second)
+	//OrderProcess completed.
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func(orderID string, wg *sync.WaitGroup) {
+		defer wg.Done()
+		if err := o.repo.UpdateOrderStatus(orderID, string(constants.COMPELETED)); err != nil {
+			log.Println("Error updating order to Completed in DB:", err)
+		}
+	}(order.OrderID, &wg)
 
 	if err := o.cache.SetOrderStatus(order.OrderID, string(constants.COMPELETED)); err != nil {
 		log.Printf("Error updating cache ,order %v to Completed: err %v", order.OrderID, err)
 	}
-
-	go func(orderID string) {
-		if err := o.repo.UpdateOrderStatus(orderID, string(constants.COMPELETED)); err != nil {
-			log.Println("Error updating order to Completed in DB:", err)
-		}
-	}(order.OrderID)
+	wg.Wait()
 }
 
-func (o *Order) CreateOrderInDB(item queue.Item) {
-	orderReq, _ := item.Value.(*common.OrderRequest)
-	err := o.repo.CreateOrder(&models.Order{
-		OrderID:     item.Id,
-		UserID:      orderReq.UserID,
-		ItemIDs:     orderReq.ItemIDs,
-		TotalAmount: orderReq.TotalAmount,
-		Status:      string(constants.PENDING),
-	})
+func (o *Order) CreateOrderInDB(qItem queue.Item) {
+	orderReq, _ := qItem.Value.(*common.OrderRequest)
+	err := o.saveOrderInDB(qItem.Id, *orderReq)
 	if err != nil {
-		log.Printf("Failed to create order %v", err)
+		log.Printf("Failed to saveOrderInDb %v err %v", qItem.Id, err)
 	}
-	o.orderProcessingQueue.AddOrderToQueue(queue.Item{Id: item.Id, Value: common.OrderItem{OrderID: item.Id}})
+	o.orderProcessingQueue.AddOrderToQueue(queue.Item{Id: qItem.Id, Value: &common.OrderItem{OrderID: qItem.Id}})
 }
 
 func (o *Order) GetOrderProcessQueue() *queue.Queue {
@@ -136,4 +123,52 @@ func (o *Order) GetOrderProcessQueue() *queue.Queue {
 
 func (o *Order) GetOrderCreationQueue() *queue.Queue {
 	return o.orderCreationQueue
+}
+
+func (o *Order) saveOrderInDB(orderId string, req common.OrderRequest) error {
+	err := o.repo.CreateOrder(&models.Order{
+		OrderID:     orderId,
+		UserID:      req.UserID,
+		TotalAmount: req.TotalAmount,
+		Status:      string(constants.PENDING),
+	})
+	if err != nil {
+		return err
+	}
+	for _, itemId := range req.ItemIDs {
+		err := o.itemRepo.CreateItem(&models.Item{ItemID: itemId, OrderID: orderId})
+		if err != nil {
+			log.Printf("Failed to create Item %v err %v", itemId, err)
+		}
+	}
+	return nil
+}
+
+func (o *Order) getOrder(orderID string) (*common.OrderResponse, error) {
+	order, err := o.repo.GetOrderByID(orderID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, sql.ErrNoRows
+		}
+		return nil, err
+	}
+	items, err := o.itemRepo.GetItemsByOrderId(orderID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, sql.ErrNoRows
+		}
+		return nil, err
+	}
+	var itemIds []string
+	for _, item := range items {
+		itemIds = append(itemIds, item.ItemID)
+	}
+	orderResp := &common.OrderResponse{
+		OrderID:     order.OrderID,
+		UserID:      order.UserID,
+		ItemIDs:     itemIds,
+		TotalAmount: order.TotalAmount,
+		Status:      order.Status,
+	}
+	return orderResp, nil
 }

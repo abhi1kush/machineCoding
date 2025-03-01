@@ -10,7 +10,7 @@ type SQLiteUserRepository struct {
 	DB *sql.DB
 }
 
-func NewSQLiteUserRepository(db *sql.DB) *SQLiteUserRepository {
+func NewSQLiteUserRepository(db *sql.DB) UserRepository {
 	return &SQLiteUserRepository{DB: db}
 }
 

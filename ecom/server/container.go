@@ -45,11 +45,12 @@ func NewContainer(appConfig config.Config) *Container {
 	// Initialize repository
 	userRepo := repository.NewSQLiteUserRepository(db)
 	orderRepo := repository.NewSQLiteOrderRepository(db)
+	itemRepo := repository.NewSQLiteItemRepository(db)
 	metricRepo := repository.NewSQLiteMetricRepository(metricDb)
 
 	// Initialize service
 	userService := services.NewUserService(userRepo)
-	orderService := services.NewOrderService(appConfig, orderRepo, metricRepo, cache)
+	orderService := services.NewOrderService(appConfig, orderRepo, itemRepo, metricRepo, cache)
 	metricService := services.NewMetricService(metricRepo)
 
 	// Initialize handlers

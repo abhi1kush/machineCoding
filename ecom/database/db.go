@@ -28,7 +28,6 @@ func ConnectDB(driver string, dsn string) *sql.DB {
 	ordersQuery := `CREATE TABLE IF NOT EXISTS orders (
 		order_id TEXT PRIMARY KEY,
 		user_id TEXT NOT NULL,
-		item_ids TEXT NOT NULL,
 		total_amount DECIMAL(10,2) NOT NULL,
 		status TEXT CHECK (status IN ('Pending', 'Processing', 'Completed')) NOT NULL
 	);`
@@ -37,17 +36,18 @@ func ConnectDB(driver string, dsn string) *sql.DB {
 		log.Fatalf("Error creating orders table: %v", err)
 	}
 
-	// // Create items if not exists
-	// itemQuery := `CREATE TABLE IF NOT EXISTS items (
-	// 	item_id TEXT PRIMARY KEY,
-	// 	amount DECIMAL(10,2) NOT NULL,
-	// 	order_id TEXT NOT NULL,
-	// 	FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE ON UPDATE CASCADE
-	// );`
-	// _, err = db.Exec(itemQuery)
-	// if err != nil {
-	// 	log.Fatalf("Error creating orders table: %v", err)
-	// }
+	// Create items if not exists
+	itemQuery := `CREATE TABLE IF NOT EXISTS items (
+		item_id TEXT,
+		amount DECIMAL(10,2) NOT NULL,
+		order_id TEXT NOT NULL,
+		FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE ON UPDATE CASCADE
+		PRIMARY KEY (item_id, order_id)
+	);`
+	_, err = db.Exec(itemQuery)
+	if err != nil {
+		log.Fatalf("Error creating orders table: %v", err)
+	}
 
 	return db
 }
@@ -63,10 +63,11 @@ func ConnectMetricsDB(driver string, dsn string) *sql.DB {
 	}
 
 	metricsQuery := `CREATE TABLE IF NOT EXISTS metrics (
-		order_id TEXT,
+		id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		order_id TEXT NOT NULL,
 		metric_name TEXT NOT NULL,
-		duration REAL,
-		PRIMARY KEY (order_id, metric_name)
+		duration REAL
 	);`
 	_, err = db.Exec(metricsQuery)
 	if err != nil {

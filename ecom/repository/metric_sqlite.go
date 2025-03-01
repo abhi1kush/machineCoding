@@ -10,7 +10,7 @@ type SQLiteMetricRepository struct {
 	DB *sql.DB
 }
 
-func NewSQLiteMetricRepository(db *sql.DB) *SQLiteMetricRepository {
+func NewSQLiteMetricRepository(db *sql.DB) MetricRepositoryI {
 	return &SQLiteMetricRepository{DB: db}
 }
 

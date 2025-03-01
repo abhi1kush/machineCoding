@@ -22,7 +22,7 @@ import (
 
 var router *gin.Engine
 
-func TestMain(m *testing.M) {
+func setupServer() {
 	gin.SetMode(gin.TestMode)
 
 	testConfig := config.Config{}
@@ -35,8 +35,6 @@ func TestMain(m *testing.M) {
 	testConfig.Queue.QueueCapacity = 500
 
 	testContainer := server.NewContainer(testConfig)
-	defer database.CloseDB(testContainer.DB)
-	defer database.CloseDB(testContainer.MetricDB)
 
 	testContainer.OrderService.GetOrderProcessQueue().StartOrderProcessor()
 	testContainer.OrderService.GetOrderCreationQueue().StartOrderProcessor()
@@ -46,7 +44,14 @@ func TestMain(m *testing.M) {
 	r.Run()
 }
 
+func tearDownServer() {
+	database.CloseDB(testContainer.DB)
+	database.CloseDB(testContainer.MetricDB)
+}
+
 func TestCreateOrder(t *testing.T) {
+	setupServer()
+	defer tearDownServer()
 	orderPayload := map[string]interface{}{
 		"user_id":      "test-user-123",
 		"item_ids":     "item1,item2",

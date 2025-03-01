@@ -6,11 +6,11 @@ type OrderAckResponse struct {
 }
 
 type OrderResponse struct {
-	OrderID     string  `json:"order_id"`
-	UserID      string  `json:"user_id"`
-	ItemIDs     string  `json:"item_ids"`
-	TotalAmount float64 `json:"total_amount"`
-	Status      string  `json:"status"`
+	OrderID     string   `json:"order_id"`
+	UserID      string   `json:"user_id"`
+	ItemIDs     []string `json:"item_ids"`
+	TotalAmount float64  `json:"total_amount"`
+	Status      string   `json:"status"`
 }
 
 type OrderStatusResponse struct {
