@@ -38,6 +38,6 @@ func RegisterRoutes(router *gin.Engine, cfg *RouterConfig) {
 	{
 		RegisterUserRoutes(apiV1, cfg.UserHandler)
 		RegisterOrderRoutes(apiV1, cfg.OrderHandler)
-		apiV1.GET("/metrics/:id", cfg.MetricHandler.GetMetricsHandler)
+		apiV1.GET("/metrics", cfg.MetricHandler.GetMetricsHandler)
 	}
 }
