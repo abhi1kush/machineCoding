@@ -28,27 +28,12 @@ func (m *Metric) GetMetrics() (*common.Metrics, error) {
 	if err != nil {
 		log.Printf("failed to get data from repository %v", err)
 	}
-	ordersPending, err := m.Repo.GetCountByStatus(string(constants.PENDING))
-	if err != nil {
-		log.Printf("failed to get data from repository %v", err)
-	}
-	ordersProcessing, err := m.Repo.GetCountByStatus(string(constants.PROCESSING))
-	if err != nil {
-		log.Printf("failed to get data from repository %v", err)
-	}
-	ordersCompleted, err := m.Repo.GetCountByStatus(string(constants.COMPELETED))
-	if err != nil {
-		log.Printf("failed to get data from repository %v", err)
-	}
 	if err != nil {
 		log.Printf("failed to get data from repository %v", err)
 	}
 	metrics := common.Metrics{
 		TotalOrdersReceived:   int64(*totalOrderReceived),
 		AverageProcessingTime: *averageProcessingTime,
-		OrdersPending:         *ordersPending,
-		OrdersProcessing:      *ordersProcessing,
-		OrdersCompleted:       *ordersCompleted,
 	}
 
 	return &metrics, nil

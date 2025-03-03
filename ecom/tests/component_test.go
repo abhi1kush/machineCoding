@@ -212,7 +212,7 @@ func TestConcurrentQueueProcessing(t *testing.T) {
 				t.Errorf("Error creating order: %v", err)
 				return
 			}
-			testContainer.OrderService.GetOrderProcessQueue().AddOrderToQueue(queue.Item{Id: orderID, Value: common.OrderItem{OrderID: orderID}})
+			testContainer.OrderService.GetOrderProcessQueue().Enqueue(queue.Item{Id: orderID, Value: common.OrderItem{OrderID: orderID}})
 		}(i)
 	}
 	wg.Wait()

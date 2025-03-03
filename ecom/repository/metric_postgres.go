@@ -6,21 +6,21 @@ import (
 	"ecom.com/models"
 )
 
-type SQLiteMetricRepository struct {
+type PostgeSqlMetricRepository struct {
 	DB *sql.DB
 }
 
-func NewSQLiteMetricRepository(db *sql.DB) MetricRepositoryI {
-	return &SQLiteMetricRepository{DB: db}
+func NewPostgeSqlMetricRepository(db *sql.DB) MetricRepositoryI {
+	return &PostgeSqlMetricRepository{DB: db}
 }
 
-func (r *SQLiteMetricRepository) CreateMetric(m *models.Metric) error {
+func (r *PostgeSqlMetricRepository) CreateMetric(m *models.Metric) error {
 	query := `INSERT INTO metrics (order_id, duration, metric_name) VALUES (?, ?, ?)`
 	_, err := r.DB.Exec(query, m.OrderId, m.Duration, m.MetricName)
 	return err
 }
 
-func (r *SQLiteMetricRepository) GetMetricByID(id int, name string) (*models.Metric, error) {
+func (r *PostgeSqlMetricRepository) GetMetricByID(id int, name string) (*models.Metric, error) {
 	query := `SELECT order_id, duration FROM metrics WHERE order_id = ? AND metric_name = ?`
 	row := r.DB.QueryRow(query, id, name)
 
@@ -32,7 +32,7 @@ func (r *SQLiteMetricRepository) GetMetricByID(id int, name string) (*models.Met
 	return &metric, nil
 }
 
-func (r *SQLiteMetricRepository) GetMetricCount() (*int, error) {
+func (r *PostgeSqlMetricRepository) GetMetricCount() (*int, error) {
 	var TotalOrdersReceived int
 	err := r.DB.QueryRow("SELECT COUNT(*) FROM metrics").Scan(&TotalOrdersReceived)
 	if err != nil && err != sql.ErrNoRows {
@@ -41,11 +41,20 @@ func (r *SQLiteMetricRepository) GetMetricCount() (*int, error) {
 	return &TotalOrdersReceived, nil
 }
 
-func (r *SQLiteMetricRepository) GetAverageTime(metricName string) (*float64, error) {
+func (r *PostgeSqlMetricRepository) GetAverageTime(metricName string) (*float64, error) {
 	var AverageDuration float64
 	err := r.DB.QueryRow("SELECT COALESCE(AVG(duration), 0) FROM metrics WHERE metric_name = ?", metricName).Scan(&AverageDuration)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
 	}
 	return &AverageDuration, nil
+}
+
+func (r *PostgeSqlMetricRepository) GetCountByStatus(status string) (*int, error) {
+	var count int
+	err := r.DB.QueryRow("SELECT COUNT(*) FROM orders WHERE status = ?", string(status)).Scan(&count)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+	return &count, nil
 }

@@ -21,8 +21,8 @@ import (
 type Order struct {
 	repo                 repository.OrderRepositoryI
 	itemRepo             repository.ItemRepositoryI
-	orderCreationQueue   *queue.Queue
-	orderProcessingQueue *queue.Queue
+	orderCreationQueue   queue.QueueI
+	orderProcessingQueue queue.QueueI
 	cache                cache.CacheI
 }
 
@@ -50,7 +50,7 @@ func (o *Order) CreateOrder(userID string, itemIDs []string, totalAmount float64
 		log.Printf("Warning: failed to set order status in Redis for orderID %s: %v", orderID, err)
 	}
 
-	o.orderCreationQueue.AddOrderToQueue(queue.Item{Id: orderID, Value: &common.OrderRequest{UserID: userID, ItemIDs: itemIDs, TotalAmount: totalAmount}})
+	o.orderCreationQueue.Enqueue(queue.Item{Id: orderID, Value: &common.OrderRequest{UserID: userID, ItemIDs: itemIDs, TotalAmount: totalAmount}})
 	return orderID, nil
 }
 
@@ -114,14 +114,14 @@ func (o *Order) CreateOrderInDB(qItem queue.Item) {
 	if err != nil {
 		log.Printf("Failed to saveOrderInDb %v err %v", qItem.Id, err)
 	}
-	o.orderProcessingQueue.AddOrderToQueue(queue.Item{Id: qItem.Id, Value: &common.OrderItem{OrderID: qItem.Id}})
+	o.orderProcessingQueue.Enqueue(queue.Item{Id: qItem.Id, Value: &common.OrderItem{OrderID: qItem.Id}})
 }
 
-func (o *Order) GetOrderProcessQueue() *queue.Queue {
+func (o *Order) GetOrderProcessQueue() queue.QueueI {
 	return o.orderProcessingQueue
 }
 
-func (o *Order) GetOrderCreationQueue() *queue.Queue {
+func (o *Order) GetOrderCreationQueue() queue.QueueI {
 	return o.orderCreationQueue
 }
 

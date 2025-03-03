@@ -9,5 +9,4 @@ type MetricRepositoryI interface {
 	GetMetricByID(id int, name string) (*models.Metric, error)
 	GetMetricCount() (*int, error)
 	GetAverageTime(metricname string) (*float64, error)
-	GetCountByStatus(status string) (*int, error)
 }
