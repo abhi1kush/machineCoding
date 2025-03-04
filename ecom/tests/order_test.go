@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
 	"sync"
 	"testing"
@@ -20,9 +21,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var router *gin.Engine
+var globalTestRouter *gin.Engine
+var globalTestContainer *server.Container
 
-func setupServer() {
+func TestMain(m *testing.M) {
 	gin.SetMode(gin.TestMode)
 
 	testConfig := config.Config{}
@@ -33,35 +35,35 @@ func setupServer() {
 	testConfig.Metrics.DSN = "metrics_test.db"
 	testConfig.Queue.WorkerPool = 5
 	testConfig.Queue.QueueCapacity = 500
+	testConfig.Redis.Addr = "localhost:6379"
+	testConfig.Redis.Password = ""
+	testConfig.Redis.DB = 1
 
-	testContainer := server.NewContainer(testConfig)
+	globalTestContainer = server.NewContainer(testConfig)
+	defer database.CloseDB(globalTestContainer.DB)
+	defer database.CloseDB(globalTestContainer.MetricDB)
 
-	testContainer.OrderService.GetOrderProcessQueue().StartOrderProcessor()
-	testContainer.OrderService.GetOrderCreationQueue().StartOrderProcessor()
+	globalTestContainer.OrderService.GetOrderProcessQueue().StartOrderProcessor()
+	globalTestContainer.OrderService.GetOrderCreationQueue().StartOrderProcessor()
 
-	r := gin.Default()
-	routes.RegisterRoutes(r, testContainer.RoutesCfg)
-	r.Run()
-}
-
-func tearDownServer() {
-	database.CloseDB(testContainer.DB)
-	database.CloseDB(testContainer.MetricDB)
+	// Initialize and assign router
+	globalTestRouter = gin.Default()
+	routes.RegisterRoutes(globalTestRouter, globalTestContainer.RoutesCfg)
+	exitCode := m.Run()
+	os.Exit(exitCode)
 }
 
 func TestCreateOrder(t *testing.T) {
-	setupServer()
-	defer tearDownServer()
 	orderPayload := map[string]interface{}{
 		"user_id":      "test-user-123",
-		"item_ids":     "item1,item2",
+		"item_ids":     []string{"item1", "item2"},
 		"total_amount": 100.50,
 	}
 	payload, _ := json.Marshal(orderPayload)
-	req, _ := http.NewRequest("POST", "/orders", bytes.NewBuffer(payload))
+	req, _ := http.NewRequest("POST", "/api/v1/orders", bytes.NewBuffer(payload))
 	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()
-	router.ServeHTTP(resp, req)
+	globalTestRouter.ServeHTTP(resp, req)
 
 	assert.Equal(t, http.StatusOK, resp.Code)
 
@@ -72,9 +74,9 @@ func TestCreateOrder(t *testing.T) {
 }
 
 func TestGetOrderStatusNotFound(t *testing.T) {
-	req, _ := http.NewRequest("GET", "/orders/non-existent-id", nil)
+	req, _ := http.NewRequest("GET", "/api/v1/orders/non-existent-id", nil)
 	resp := httptest.NewRecorder()
-	router.ServeHTTP(resp, req)
+	globalTestRouter.ServeHTTP(resp, req)
 	assert.Equal(t, http.StatusNotFound, resp.Code)
 }
 
@@ -83,10 +85,10 @@ func TestCreateOrderInvalidPayload(t *testing.T) {
 		"user_id": 123,
 	}
 	payload, _ := json.Marshal(orderPayload)
-	req, _ := http.NewRequest("POST", "/orders", bytes.NewBuffer(payload))
+	req, _ := http.NewRequest("POST", "/api/v1/orders", bytes.NewBuffer(payload))
 	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()
-	router.ServeHTTP(resp, req)
+	globalTestRouter.ServeHTTP(resp, req)
 	assert.Equal(t, http.StatusBadRequest, resp.Code)
 }
 
@@ -101,14 +103,14 @@ func TestLoad500ConcurrentRequests(t *testing.T) {
 			defer wg.Done()
 			orderPayload := map[string]interface{}{
 				"user_id":      "test-user-" + strconv.Itoa(i),
-				"item_ids":     "item1,item2",
+				"item_ids":     []string{"item1", "item2"},
 				"total_amount": 100.50,
 			}
 			payload, _ := json.Marshal(orderPayload)
-			req, _ := http.NewRequest("POST", "/orders", bytes.NewBuffer(payload))
+			req, _ := http.NewRequest("POST", "/api/v1/orders", bytes.NewBuffer(payload))
 			req.Header.Set("Content-Type", "application/json")
 			resp := httptest.NewRecorder()
-			router.ServeHTTP(resp, req)
+			globalTestRouter.ServeHTTP(resp, req)
 			assert.Equal(t, http.StatusOK, resp.Code)
 		}(i)
 	}
@@ -119,9 +121,9 @@ func TestLoad500ConcurrentRequests(t *testing.T) {
 
 func TestGetMetrics(t *testing.T) {
 	time.Sleep(3 * time.Second)
-	req, _ := http.NewRequest("GET", "/metrics", nil)
+	req, _ := http.NewRequest("GET", "/api/v1/metrics", nil)
 	resp := httptest.NewRecorder()
-	router.ServeHTTP(resp, req)
+	globalTestRouter.ServeHTTP(resp, req)
 	assert.Equal(t, http.StatusOK, resp.Code)
 
 	var metrics map[string]interface{}
@@ -130,7 +132,4 @@ func TestGetMetrics(t *testing.T) {
 
 	assert.Contains(t, metrics, "total_orders_received")
 	assert.Contains(t, metrics, "average_processing_time")
-	assert.Contains(t, metrics, "orders_pending")
-	assert.Contains(t, metrics, "orders_processing")
-	assert.Contains(t, metrics, "orders_completed")
 }

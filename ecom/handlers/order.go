@@ -3,6 +3,8 @@ package handlers
 import (
 	"net/http"
 
+	"ecom.com/errors"
+
 	"ecom.com/common"
 	"ecom.com/services"
 
@@ -38,6 +40,10 @@ func (h *OrderHandler) GetOrderHandler(c *gin.Context) {
 	orderID := c.Param("id")
 	order, err := h.Service.GetOrder(orderID)
 	if err != nil {
+		if err == errors.ErrSqlNOtFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch order status"})
 		return
 	}

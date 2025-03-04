@@ -18,15 +18,12 @@ type Container struct {
 	DB       *sql.DB
 	MetricDB *sql.DB
 
-	UserRepo   repository.UserRepository
 	OrderRepo  repository.OrderRepositoryI
 	MetricRepo repository.MetricRepositoryI
 
-	UserService   *services.UserService
 	OrderService  *services.Order
 	MetricService *services.Metric
 
-	UserHandler   *handlers.UserHandler
 	MetricHandler *handlers.MetricHandler
 	OrderHandler  *handlers.OrderHandler
 
@@ -43,18 +40,15 @@ func NewContainer(appConfig config.Config) *Container {
 	metricDb := database.ConnectMetricsDB(appConfig.Metrics.Driver, appConfig.Metrics.DSN)
 
 	// Initialize repository
-	userRepo := repository.NewSQLiteUserRepository(db)
 	orderRepo := repository.NewSQLiteOrderRepository(db)
 	itemRepo := repository.NewSQLiteItemRepository(db)
 	metricRepo := repository.NewSQLiteMetricRepository(metricDb)
 
 	// Initialize service
-	userService := services.NewUserService(userRepo)
 	orderService := services.NewOrderService(appConfig, orderRepo, itemRepo, metricRepo, cache)
 	metricService := services.NewMetricService(metricRepo)
 
 	// Initialize handlers
-	userHandler := handlers.NewUserHandler(userService)
 	orderHandler := handlers.NewOrderHandler(orderService)
 	metricHandler := handlers.NewMetricHandler(metricService)
 
@@ -64,19 +58,15 @@ func NewContainer(appConfig config.Config) *Container {
 		DB:       db,
 		MetricDB: metricDb,
 
-		UserRepo:   userRepo,
 		OrderRepo:  orderRepo,
 		MetricRepo: metricRepo,
 
-		UserService:  userService,
 		OrderService: orderService,
 
-		UserHandler:   userHandler,
 		OrderHandler:  orderHandler,
 		MetricHandler: metricHandler,
 
 		RoutesCfg: &routes.RouterConfig{
-			UserHandler:   userHandler,
 			OrderHandler:  orderHandler,
 			MetricHandler: metricHandler,
 		},

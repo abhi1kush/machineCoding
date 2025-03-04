@@ -16,7 +16,7 @@ func NewPostgreSqlItemRepository(db *sql.DB) ItemRepositoryI {
 }
 
 func (r *PostgreSqlItemRepository) CreateItem(item *models.Item) error {
-	itemQuery := `INSERT INTO items (item_id, order_id, amount) VALUES (?, ?, ?)`
+	itemQuery := `INSERT INTO items (item_id, order_id, amount) VALUES ($1, $2, $3)`
 	_, err := r.DB.Exec(itemQuery, item.ItemID, item.OrderID, item.Amount)
 	if err != nil {
 		log.Printf("Failed to add item err %v", err)
@@ -25,7 +25,7 @@ func (r *PostgreSqlItemRepository) CreateItem(item *models.Item) error {
 }
 
 func (r *PostgreSqlItemRepository) GetItem(id string) (*models.Item, error) {
-	query := `SELECT item_id, order_id, amount FROM items WHERE item_id = ?`
+	query := `SELECT item_id, order_id, amount FROM items WHERE item_id = $1`
 	row := r.DB.QueryRow(query, id)
 
 	var item models.Item
@@ -37,7 +37,7 @@ func (r *PostgreSqlItemRepository) GetItem(id string) (*models.Item, error) {
 }
 
 func (r *PostgreSqlItemRepository) GetItemsByOrderId(id string) ([]models.Item, error) {
-	query := `SELECT item_id, order_id, amount FROM items WHERE order_id = ?`
+	query := `SELECT item_id, order_id, amount FROM items WHERE order_id = $1`
 	rows, err := r.DB.Query(query, id)
 	if err != nil {
 		log.Println("Error executing query:", err)
@@ -58,7 +58,7 @@ func (r *PostgreSqlItemRepository) GetItemsByOrderId(id string) ([]models.Item, 
 }
 
 func (r *PostgreSqlItemRepository) RemoveItem(itemId string, orderId string) error {
-	itemQuery := `DELETE FROM items WHERE item_id = ? AND order_id = ?`
+	itemQuery := `DELETE FROM items WHERE item_id = $1 AND order_id = $2`
 	_, err := r.DB.Exec(itemQuery, itemId, orderId)
 	if err != nil {
 		log.Printf("Failed to add item err %v", err)
